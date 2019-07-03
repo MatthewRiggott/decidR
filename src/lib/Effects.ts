@@ -16,7 +16,7 @@ function getSize(el: HTMLElement | any) {
 }
 
 // https://github.com/rehooks/component-size/blob/master/index.js
-export function useComponentSize<T>(ref: React.RefObject<T>) {
+export function useComponentSize<T>(ref: React.RefObject<T>, handlers?: (() => void)[]) {
   let [ComponentSize, setComponentSize] = useState(
     getSize(ref ? ref.current : {})
   )
@@ -25,6 +25,11 @@ export function useComponentSize<T>(ref: React.RefObject<T>) {
     function handleResize() {
       if (ref.current) {
         setComponentSize(getSize(ref.current))
+        if(handlers) {
+          for(let handler of handlers) {
+            handler();
+          }
+        }
       }
     },
     [ref]
@@ -42,7 +47,6 @@ export function useComponentSize<T>(ref: React.RefObject<T>) {
       return () => {
         window.removeEventListener('resize', debounceHandleResize)
       }
-      
     },
     [ref.current]
   )
@@ -63,6 +67,59 @@ export function useWindowWidth() {
   });
   
   return width;
+}
+
+export function useComponentTouch<T extends HTMLElement>(ref: React.RefObject<T>) {
+  let [ComponentSize, setComponentSize] = useState(
+    getSize(ref ? ref.current : {})
+  )
+
+  const onTouchStart = useCallback(
+    function onTouchStart() {
+      if (ref.current) {
+        setComponentSize(getSize(ref.current))
+      }
+    },
+    [ref]
+  )
+
+  const onTouchMove = useCallback(
+    function onTouchMove() {
+      if (ref.current) {
+        setComponentSize(getSize(ref.current))
+      }
+    },
+    [ref]
+  )
+
+  const onTouchEnd = useCallback(
+    function onTouchEnd() {
+      if (ref.current) {
+        setComponentSize(getSize(ref.current))
+      }
+    },
+    [ref]
+  )
+
+  useLayoutEffect(
+    () => {
+      if (ref == null || !ref.current) {
+        return
+      }
+      
+      ref.current.addEventListener('touchstart', onTouchStart)
+      ref.current.addEventListener('touchmove', onTouchMove)
+      ref.current.addEventListener('touchend', onTouchEnd)
+      return () => {
+        const node = ref.current!;
+        node.removeEventListener('touchstart', onTouchStart)
+        node.removeEventListener('touchmove', onTouchMove)
+        node.removeEventListener('touchend', onTouchEnd)
+      }
+    },
+    [ref.current]
+  )
+  return ComponentSize
 }
 
 export default useWindowWidth;
