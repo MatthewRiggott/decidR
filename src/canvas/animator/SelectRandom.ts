@@ -14,7 +14,7 @@ interface IPoint {
 }
 
 //configuration
-const circleRadius = 25
+const circleRadius = 60
 const backgroundColor = 'black'
 
 enum State {
@@ -112,6 +112,13 @@ class SelectRandom implements IAnimationHandler {
         this.countDownToLock.reset()
       }
       this.activeTouches = touches.map(t => this.copyTouch(t))
+      const touchCount = this.activeTouches.length
+      if(touchCount <= 1) {
+        this.state = State.Empty
+      }
+      if(touchCount > 1) {
+        this.state = State.Listening
+      }
     }
     if(this.state == State.Finished) {
       if(touchEvent.targetTouches.length > 0 && this.enableResetFlag) {
