@@ -1,6 +1,9 @@
 import IAnimationHandler from './IAnimationHandler';
 import { COLORS } from './Colors';
 import { countDownWithWrap } from '../animations/CanvasCountDown';
+import { iCircle, withVanishingState, DrawState } from '../drawable/Drawable';
+import circle from '../drawable/Circle';
+import { timingSafeEqual } from 'crypto';
 
 interface ITouch {
   id: number
@@ -24,6 +27,12 @@ enum State {
   Finished
 }
 
+interface iSimulatedTouch {
+  identifier: number
+  pageX: number
+  pageY: number
+}
+
 class SelectRandom implements IAnimationHandler {
   touchStart: (te: TouchEvent) => void
   touchMove: (te: TouchEvent) => void
@@ -37,7 +46,7 @@ class SelectRandom implements IAnimationHandler {
   width: number
   height: number
 
-  activeTouches: ITouch[]
+  activeTouches: (iCircle | (withVanishingState & iCircle))[]
   colors: string[]
   offset: IPoint
   state: State
@@ -86,23 +95,25 @@ class SelectRandom implements IAnimationHandler {
 
   lockPlayers = () => {
     this.countDownToSelect = countDownWithWrap(this.canvas!, 4000, { color: "yellow", callback: this.selectRandomPlayer, callbackInterval: this.activeTouches.length - 1, lineWidth: 10 })
+    this.activeTouches = this.activeTouches.map(c => withVanishingState(c, this.ctx!, undefined));
     this.state = State.Selecting
   }
 
   selectRandomPlayer = () => {
-    const selectedId = this.activeTouches[Math.floor(Math.random() * this.activeTouches.length)].id
-    this.activeTouches = this.activeTouches.filter(t => t.id != selectedId)
-    if(this.activeTouches.length == 1) {
+    const unpickedTouches = (this.activeTouches as (iCircle & withVanishingState)[]).filter(t => t.getState() === DrawState.Normal)
+
+    const selectedId = unpickedTouches[Math.floor(Math.random() * unpickedTouches.length)].id
+    const index = this.activeTouches.findIndex(t => t.id == selectedId)
+    let target = this.activeTouches[index] as iCircle & withVanishingState
+    target.setState(DrawState.Vanishing)
+    if(unpickedTouches.length == 2) {
       this.state = State.Finished
     }
   }
 
-  copyTouch = (touch: Touch): ITouch => {
-    return { 
-      id: touch.identifier,
-      position: { x: touch.pageX - this.offset.x, y: touch.pageY - this.offset.y },
-      color: this.colors[touch.identifier]
-    }
+  copyTouch = (touch: Touch | iSimulatedTouch): iCircle => {
+    const id = touch.identifier
+    return circle(id, COLORS[id], { x: touch.pageX - this.offset.x, y: touch.pageY - this.offset.y }, circleRadius)
   }
 
   updateTouches = (touchEvent: TouchEvent) => {
@@ -131,16 +142,20 @@ class SelectRandom implements IAnimationHandler {
     }
   }
 
+
+
   clickAsTouch = (mouseEvent: MouseEvent) => {
     if(this.state == State.Empty || this.state == State.Listening) {
-      const id = this.activeTouches.length;
-      const touch = { 
-        id,
-        position: { x: mouseEvent.clientX - this.offset.x, y: mouseEvent.clientY - this.offset.y },
-        color: this.colors[id]
+      const identifier = this.activeTouches.length;
+      const touch: iSimulatedTouch = { 
+        identifier,
+        pageX: mouseEvent.clientX,
+        pageY: mouseEvent.clientY
       }
 
-      this.activeTouches = [...this.activeTouches, touch];
+      const newTouch = this.copyTouch(touch);
+      this.activeTouches = [...this.activeTouches, newTouch]
+
       if(this.activeTouches.length > 1 && this.state == State.Empty) {
         this.state = State.Listening
       }
@@ -192,10 +207,7 @@ class SelectRandom implements IAnimationHandler {
     if(this.state != State.Finished)
     {
       for(let touch of this.activeTouches) {
-        ctx.beginPath()
-        ctx.fillStyle = touch.color
-        ctx.arc(touch.position.x, touch.position.y, circleRadius, 0, Math.PI * 2)
-        ctx.fill()
+        touch.draw(ctx, delta)
       }
     }
 
@@ -209,31 +221,32 @@ class SelectRandom implements IAnimationHandler {
 
     if(this.state == State.Finished) {
       for(let touch of this.activeTouches) {
-        ctx.beginPath()
-        ctx.fillStyle = touch.color
-        ctx.arc(touch.position.x, touch.position.y, circleRadius, 0, Math.PI * 2)
-        ctx.fill()
+        touch.draw(ctx, delta)
+        // ctx.beginPath()
+        // ctx.fillStyle = touch.color
+        // ctx.arc(touch.position.x, touch.position.y, circleRadius, 0, Math.PI * 2)
+        // ctx.fill()
       }
     }
   }
 
-  testRender = () => {
-    this.activeTouches = [{
-      id: 0,
-      position: {
-        x: 50,
-        y: 50
-      },
-      color: this.colors[0]
-    }, {
-      id: 1,
-      position: {
-        x: 100,
-        y: 50
-      },
-      color: this.colors[1]
-    }]
-  }
+  // testRender = () => {
+  //   this.activeTouches = [{
+  //     id: 0,
+  //     position: {
+  //       x: 50,
+  //       y: 50
+  //     },
+  //     color: this.colors[0]
+  //   }, {
+  //     id: 1,
+  //     position: {
+  //       x: 100,
+  //       y: 50
+  //     },
+  //     color: this.colors[1]
+  //   }]
+  // }
 }
 
 export default SelectRandom;
