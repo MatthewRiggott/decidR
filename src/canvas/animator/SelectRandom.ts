@@ -28,10 +28,21 @@ enum State {
   Finished
 }
 
+enum SelectionMode {
+  FirstOnly,
+  FullOrder,
+  Teams
+}
+
 interface iSimulatedTouch {
   identifier: number
   pageX: number
   pageY: number
+}
+
+interface iSelectRandomOptions {
+  numberOfTeams?: number
+
 }
 
 class SelectRandom implements IAnimationHandler {
@@ -57,7 +68,7 @@ class SelectRandom implements IAnimationHandler {
   countDownToSelect: any
   selectedIndex: number
 
-  constructor() {
+  constructor(mode = SelectionMode.FirstOnly, options?: iSelectRandomOptions) {
     this.lastFrame = 0
     this.touchStart = this.updateTouches
     this.touchMove = this.updateTouches

@@ -20,7 +20,6 @@ const Canvas: React.FC<ICanvasProps> = (props: ICanvasProps) => {
   let { width, height } = size
   return (
     <div className="Canvas">
-      {width}
       <canvas ref={ref} height={height} width={width}></canvas>
     </div>
   );

@@ -7,7 +7,6 @@ import SelectRandom from './canvas/animator/SelectRandom';
 const App: React.FC = () => {
   return (
     <div className="App">
-        <p>Testing</p>
       <Canvas height={400} width={600} animator={ new SelectRandom() } />
     </div>
   );
