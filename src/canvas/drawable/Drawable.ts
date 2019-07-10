@@ -1,3 +1,7 @@
+import { clamp } from "lodash";
+import { Color } from "csstype";
+import { isCircle } from "./Circle";
+
 var chance: Chance.Chance = require('chance')();
 
 export interface iPoint {
@@ -50,7 +54,7 @@ const defaultOptions: iVanishingSettings = {
   frameDelay: 100
 }
 
-export function withVanishingState<T extends iDrawable>(drawable: T, ctx: CanvasRenderingContext2D, options: iVanishingOptions | undefined): T & withVanishingState {
+export function withVanishingState<T extends iDrawable>(drawable: T, ctx: CanvasRenderingContext2D, options?: iVanishingOptions): T & withVanishingState {
   const vanishOptions = Object.assign({}, defaultOptions, options)
   let state: DrawState = DrawState.Normal
   let normalDraw = drawable.draw
@@ -70,8 +74,12 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
         animationDuration = 0
         if(animationFrames.length == 0) {
           const sx = drawable.imageData
-          animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames)
-          let x = 2
+          animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color)
+        }
+        if(isCircle(drawable)) {
+          const radius = drawable.radius
+          drawable.position.x -= radius
+          drawable.position.y -= radius
         }
       }
     },
@@ -98,16 +106,6 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
   return Object.assign({}, drawable, vanishable)
 }
 
-const clamp = (value: number, min: number, max: number) => {
-  if(value < min) {
-    return min
-  } else if (value > max) {
-    return max
-  } else {
-    return value
-  }
-}
-
 const weightedRandomDistrib = (peak: number, count: number) => {
   const prob = [], seq = [];
   for(let i=0;i<count;i++) {
@@ -117,38 +115,57 @@ const weightedRandomDistrib = (peak: number, count: number) => {
   return chance.weighted(seq, prob);
 }
 
-function loadVanishFrames (imageData: ImageData, count: number): HTMLImageElement[] {
+function loadVanishFrames (imageData: ImageData, count: number, colorFilter?: Color): HTMLImageElement[] {
   let imgs: HTMLImageElement[] = [];
   const pixelArr = imageData.data;
   const data = imageData.data.slice(0).fill(0);
   const width = imageData.width
   const height = imageData.height
   let imageDataArray = Array.from({length: count}, e => data.slice(0));
-
+  
   //put pixel info to imageDataArray (Weighted Distributed)
   for (let i = 0; i < pixelArr.length; i+=4) {
     //find the highest probability canvas the pixel should be in
-    const p = Math.floor((i/pixelArr.length) * count);
-    const a = imageDataArray[weightedRandomDistrib(p, count)];
+    const p = Math.floor((i/pixelArr.length) * count)
+    const a = imageDataArray[weightedRandomDistrib(p, count)]
     
     // assign RGBA values from image to dust canvas
-    a[i] = pixelArr[i];
-    a[i+1] = pixelArr[i+1];
-    a[i+2] = pixelArr[i+2];
-    a[i+3] = pixelArr[i+3];
-    if(a[i] == 255 && a[i+1] == 255 && a[i+2] == 255) {
-      a[i+3] = 0;
+    a[i] = pixelArr[i]
+    a[i+1] = pixelArr[i+1]
+    a[i+2] = pixelArr[i+2]
+    a[i+3] = pixelArr[i+3]
+
+    if(colorFilter != undefined) {
+      const color = hexToRGB(colorFilter)
+      if(a[i] !== color.red || a[i+1] !== color.green || a[i+2] !== color.blue) {
+        a[i] = 0
+        a[i+1] = 0
+        a[i+2] = 0
+        a[i+3] = 0
+      }
     }
+
+
+    
   }
   for(let i = 0; i < imageDataArray.length; i++) {
-    let img = new Image();
-    let tmpCanvas = document.createElement("canvas");
-    tmpCanvas.width = width;
-    tmpCanvas.height = height;
-    let tmpCtx = tmpCanvas.getContext("2d")!;
-    tmpCtx.putImageData(new ImageData(imageDataArray[i], width, height), 0, 0);
-    img.src = tmpCanvas.toDataURL('image/png');	
-    imgs.push(img);
+    let img = new Image()
+    let tmpCanvas = document.createElement("canvas")
+    tmpCanvas.width = width
+    tmpCanvas.height = height
+    let tmpCtx = tmpCanvas.getContext("2d")!
+    tmpCtx.putImageData(new ImageData(imageDataArray[i], width, height), 0, 0)
+    img.src = tmpCanvas.toDataURL('image/png')	
+    imgs.push(img)
   }
-  return imgs;
+  return imgs
+}
+
+function hexToRGB(hexString: string){
+  const hexColorNumber = parseInt(hexString.replace("#", "0x"))
+  return {
+    red: (hexColorNumber >> 16) & 0xFF,
+    green: (hexColorNumber >> 8) & 0xFF,  
+    blue: hexColorNumber & 0xFF
+  }
 }

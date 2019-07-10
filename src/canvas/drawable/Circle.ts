@@ -1,5 +1,9 @@
 import { iCircle, iPoint } from "./Drawable";
 
+export function isCircle(object: any): object is iCircle {
+  return 'radius' in object;
+}
+
 export default function circle(id: number, color: string, pos: iPoint, radius: number): iCircle {
   let imageData: (ImageData | undefined)
   let position = pos

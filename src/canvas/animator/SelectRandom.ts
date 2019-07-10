@@ -4,6 +4,7 @@ import { countDownWithWrap } from '../animations/CanvasCountDown';
 import { iCircle, withVanishingState, DrawState } from '../drawable/Drawable';
 import circle from '../drawable/Circle';
 import { timingSafeEqual } from 'crypto';
+import { clamp } from 'lodash';
 
 interface ITouch {
   id: number
@@ -94,8 +95,9 @@ class SelectRandom implements IAnimationHandler {
   }
 
   lockPlayers = () => {
-    this.countDownToSelect = countDownWithWrap(this.canvas!, 4000, { color: "yellow", callback: this.selectRandomPlayer, callbackInterval: this.activeTouches.length - 1, lineWidth: 10 })
-    this.activeTouches = this.activeTouches.map(c => withVanishingState(c, this.ctx!, undefined));
+    const touches = this.activeTouches.length;
+    this.countDownToSelect = countDownWithWrap(this.canvas!, clamp((touches - 1) * 400, 1000, 3000), { color: "yellow", callback: this.selectRandomPlayer, callbackInterval: this.activeTouches.length - 1, lineWidth: 10 })
+    this.activeTouches = this.activeTouches.map(c => withVanishingState(c, this.ctx!, { vanishLength: 1200, frameDelay: 35 }));
     this.state = State.Selecting
   }
 
