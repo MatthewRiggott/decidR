@@ -1,15 +1,17 @@
 export const COLORS = [
-  "#C0C0C0", // silver
+  "#ffffff", // white
+  "#c0c0c0", // silver
   "#FF0000", // red
   "#800000", // maroon
   "#FFFF00", // yellow
-  "#808000", // olive
   "#00FF00", // lime
   "#008000", // green
-  "#00FFFF", // aqua
+  "#7fffd4", // aquamarine
   "#008080", // teal
-  "#0000FF", // blue
+  "#1e90ff", // blue
   "#000080", // navy
   "#FF00FF", // fuschia
-  "#800080", // purple\
+  "#663399", // purple
+  "#ffa500", // orange
+  "#ff69b4" // pink
 ]

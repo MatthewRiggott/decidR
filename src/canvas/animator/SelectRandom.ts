@@ -1,16 +1,9 @@
 import IAnimationHandler from './IAnimationHandler';
 import { COLORS } from './Colors';
 import { countDownWithWrap } from '../animations/CanvasCountDown';
-import { iCircle, withVanishingState, DrawState } from '../drawable/Drawable';
+import { iCircle, withVanishingState, DrawState, iVanishingOptions, isVanishable, DrawMode } from '../drawable/Drawable';
 import circle from '../drawable/Circle';
-import { timingSafeEqual } from 'crypto';
-import { clamp } from 'lodash';
-
-interface ITouch {
-  id: number
-  color: string
-  position: IPoint
-}
+import { clamp, shuffle } from 'lodash';
 
 interface IPoint {
   x: number
@@ -22,6 +15,7 @@ const circleRadius = 60
 const backgroundColor = 'black'
 
 enum State {
+  Initializing,
   Empty, 
   Listening,
   Selecting,
@@ -41,8 +35,7 @@ interface iSimulatedTouch {
 }
 
 interface iSelectRandomOptions {
-  numberOfTeams?: number
-
+  teamCount?: number
 }
 
 class SelectRandom implements IAnimationHandler {
@@ -61,8 +54,10 @@ class SelectRandom implements IAnimationHandler {
   activeTouches: (iCircle | (withVanishingState & iCircle))[]
   colors: string[]
   offset: IPoint
-  state: State
+  _state: State
   enableResetFlag: boolean
+  selectionMode: SelectionMode
+  teamCount: number
 
   countDownToLock: any
   countDownToSelect: any
@@ -76,17 +71,31 @@ class SelectRandom implements IAnimationHandler {
     this.mouseLeft = this.clickAsTouch
     this.mouseRight = this.clickToCancel
 
+    this._state = State.Initializing
     this.canvas = null
     this.ctx = null
     this.countDownToLock = null
     this.selectedIndex = -1
+    this.selectionMode = mode
+    this.teamCount = 2
 
     this.activeTouches = []
-    this.colors = [...COLORS]
+    this.colors = shuffle(COLORS)
     this.offset = { x: 0, y: 0 }
     this.height = this.width = 0
     this.state = State.Empty
     this.enableResetFlag = false
+  }
+
+  get state(): State { return this._state }
+  set state(value) {
+    if(value === this._state) {
+      return
+    }
+    this._state = value
+    if(this._state === State.Empty) {
+      this.colors = shuffle(COLORS)
+    }
   }
 
   setCanvas = (_canvas: HTMLCanvasElement) => {
@@ -107,8 +116,29 @@ class SelectRandom implements IAnimationHandler {
 
   lockPlayers = () => {
     const touches = this.activeTouches.length;
-    this.countDownToSelect = countDownWithWrap(this.canvas!, clamp((touches - 1) * 400, 1000, 3000), { color: "yellow", callback: this.selectRandomPlayer, callbackInterval: this.activeTouches.length - 1, lineWidth: 10 })
-    this.activeTouches = this.activeTouches.map(c => withVanishingState(c, this.ctx!, { vanishLength: 1200, frameDelay: 35 }));
+    const callbacks = this.selectionMode === SelectionMode.FirstOnly ?  this.activeTouches.length - 1 : this.activeTouches.length;
+    this.countDownToSelect = countDownWithWrap(this.canvas!, clamp((touches - 1) * 400, 1000, 3000), { color: "yellow", callback: this.selectRandomPlayer, callbackInterval: callbacks, lineWidth: 10 })
+    let vanishOptions: iVanishingOptions = { vanishLength: 1200, frameDelay: 35, callback: this.selectionMode == SelectionMode.Teams }
+    let range = shuffle(Array.from(Array(touches).keys()))
+    let teams = new Array(this.teamCount)
+    let teamMap = new Array(touches)
+    for(let i = 0; i < this.teamCount; i ++) {
+      teams[i] = []
+    }
+    if(this.selectionMode === SelectionMode.Teams) {
+      for(let i = 0; i < range.length; i++) {
+        teams[i % this.teamCount].push(this.activeTouches[range[i]])
+        teamMap[range[i]] = teams[i % this.teamCount][0].id
+      }
+    }
+    console.log(teams)
+    this.activeTouches = this.activeTouches.map(t => {
+      let options= {}
+      if(this.selectionMode === SelectionMode.Teams){
+        options = Object.assign(options, { nextColor: this.activeTouches[teamMap[t.id!]].color })
+      }
+      return withVanishingState(t, this.ctx!, Object.assign(options, vanishOptions))
+    })
     this.state = State.Selecting
   }
 
@@ -118,15 +148,17 @@ class SelectRandom implements IAnimationHandler {
     const selectedId = unpickedTouches[Math.floor(Math.random() * unpickedTouches.length)].id
     const index = this.activeTouches.findIndex(t => t.id == selectedId)
     let target = this.activeTouches[index] as iCircle & withVanishingState
-    target.setState(DrawState.Vanishing)
-    if(unpickedTouches.length == 2) {
+    target.setState(DrawState.Animating)
+    const threshold = this.selectionMode == SelectionMode.FirstOnly ? 2 : 1
+
+    if(unpickedTouches.length == threshold) {
       this.state = State.Finished
     }
   }
 
   copyTouch = (touch: Touch | iSimulatedTouch): iCircle => {
     const id = touch.identifier
-    return circle(id, COLORS[id], { x: touch.pageX - this.offset.x, y: touch.pageY - this.offset.y }, circleRadius)
+    return circle(id, this.colors[id], { x: touch.pageX - this.offset.x, y: touch.pageY - this.offset.y }, circleRadius)
   }
 
   updateTouches = (touchEvent: TouchEvent) => {
@@ -154,8 +186,6 @@ class SelectRandom implements IAnimationHandler {
       }
     }
   }
-
-
 
   clickAsTouch = (mouseEvent: MouseEvent) => {
     if(this.state == State.Empty || this.state == State.Listening) {
@@ -217,13 +247,6 @@ class SelectRandom implements IAnimationHandler {
       this.countDownToLock.reset()
     }
 
-    if(this.state != State.Finished)
-    {
-      for(let touch of this.activeTouches) {
-        touch.draw(ctx, delta)
-      }
-    }
-
     if(this.state == State.Listening) {
       this.countDownToLock.draw(delta)
     }
@@ -232,34 +255,10 @@ class SelectRandom implements IAnimationHandler {
       this.countDownToSelect.draw(delta);
     }
 
-    if(this.state == State.Finished) {
-      for(let touch of this.activeTouches) {
-        touch.draw(ctx, delta)
-        // ctx.beginPath()
-        // ctx.fillStyle = touch.color
-        // ctx.arc(touch.position.x, touch.position.y, circleRadius, 0, Math.PI * 2)
-        // ctx.fill()
-      }
+    for(let touch of this.activeTouches) {
+      touch.draw(ctx, delta)
     }
   }
-
-  // testRender = () => {
-  //   this.activeTouches = [{
-  //     id: 0,
-  //     position: {
-  //       x: 50,
-  //       y: 50
-  //     },
-  //     color: this.colors[0]
-  //   }, {
-  //     id: 1,
-  //     position: {
-  //       x: 100,
-  //       y: 50
-  //     },
-  //     color: this.colors[1]
-  //   }]
-  // }
 }
 
 export default SelectRandom;

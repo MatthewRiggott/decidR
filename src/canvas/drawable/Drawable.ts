@@ -1,6 +1,7 @@
 import { clamp } from "lodash";
 import { Color } from "csstype";
 import { isCircle } from "./Circle";
+import { callbackify } from "util";
 
 var chance: Chance.Chance = require('chance')();
 
@@ -11,11 +12,18 @@ export interface iPoint {
 
 export enum DrawState {
   Normal,
-  Vanishing
+  Animating,
+  AnimationFinished
+}
+
+export enum DrawMode {
+  Vanishing,
+  Unvanishing
 }
 
 export interface iDrawable {
   draw: (ctx: CanvasRenderingContext2D, delta: number) => void
+  loadImageData: () => void
   id?: number
   position: iPoint
   color: string
@@ -32,14 +40,25 @@ export interface iCircle extends iDrawable {
 }
 
 export interface withVanishingState extends iDrawable {
+  getMode: () => DrawMode
+  setMode: (value: DrawMode) => void
   getState: () => DrawState
   setState: (value: DrawState) => void
+  reloadFrames: () => void
 }
+
+export function isVanishable(object: any): object is withVanishingState {
+  return true
+  //return 'getMode' in object && 'getState' in object;
+}
+
 
 export interface iVanishingOptions {
   frames?: number
   vanishLength?: number
   frameDelay?: number
+  callback?: boolean
+  nextColor?: Color
 }
 
 export interface iVanishingSettings {
@@ -51,7 +70,7 @@ export interface iVanishingSettings {
 const defaultOptions: iVanishingSettings = {
   frames: 45,
   vanishLength: 2500,
-  frameDelay: 100
+  frameDelay: 100,
 }
 
 export function withVanishingState<T extends iDrawable>(drawable: T, ctx: CanvasRenderingContext2D, options?: iVanishingOptions): T & withVanishingState {
@@ -59,9 +78,16 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
   let state: DrawState = DrawState.Normal
   let normalDraw = drawable.draw
   let animationDuration = 0
+  let mode = DrawMode.Vanishing
   let animationFrames: HTMLImageElement[] = []
   let vanishable = {
     vanishOptions,
+    getMode() { return mode },
+    setMode(value: DrawMode) {
+      mode = value
+      animationDuration = 0
+      this.setState(DrawState.Animating)
+    },
     getState() { return state },
     setState(value: DrawState) {
       if(state == value) {
@@ -70,33 +96,51 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
       state = value
       if(state == DrawState.Normal) {
         animationDuration = 0
-      } else if(state == DrawState.Vanishing) {
+      } else if(state == DrawState.Animating) {
         animationDuration = 0
         if(animationFrames.length == 0) {
           const sx = drawable.imageData
           animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color)
         }
-        if(isCircle(drawable)) {
-          const radius = drawable.radius
-          drawable.position.x -= radius
-          drawable.position.y -= radius
+      } else if (state == DrawState.AnimationFinished) {
+        if(vanishOptions.callback && mode == DrawMode.Vanishing) {
+          drawable.color = vanishOptions.nextColor!
+          drawable.loadImageData()
+          this.reloadFrames()
+          this.setMode(DrawMode.Unvanishing)
+        } else if (mode == DrawMode.Unvanishing) {
+          this.setState(DrawState.Normal)
         }
       }
+    },
+    reloadFrames: function() {
+      animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color)
     },
     draw: function(ctx: CanvasRenderingContext2D, delta: number) {
       if(state == DrawState.Normal) {
         normalDraw(ctx, delta)
-      } else if(state == DrawState.Vanishing) {
+      } else if(state == DrawState.Animating) {
         animationDuration += delta
         if(animationDuration >= (animationFrames.length * vanishOptions.frameDelay) + vanishOptions.vanishLength) {
+          this.setState(DrawState.AnimationFinished)
           return
+        }
+        let dx = drawable.position.x
+        let dy = drawable.position.y
+        if(isCircle(drawable)) {
+          const radius = drawable.radius
+          dx -= radius
+          dy -= radius
         }
 
         for(let i = 0; i < animationFrames.length; i++) {
           const step = animationDuration - (i+1) * vanishOptions.frameDelay
           let alpha = clamp(1 - (step / vanishOptions.vanishLength), 0, 1)
+          if(mode == DrawMode.Unvanishing) {
+            alpha = 1 - alpha
+          }
           ctx.globalAlpha = alpha
-          ctx.drawImage(animationFrames[i], drawable.position.x, drawable.position.y)
+          ctx.drawImage(animationFrames[i], dx, dy)
         }
         ctx.globalAlpha = 1;
       }
@@ -144,9 +188,6 @@ function loadVanishFrames (imageData: ImageData, count: number, colorFilter?: Co
         a[i+3] = 0
       }
     }
-
-
-    
   }
   for(let i = 0; i < imageDataArray.length; i++) {
     let img = new Image()
