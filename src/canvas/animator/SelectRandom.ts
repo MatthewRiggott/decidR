@@ -63,6 +63,8 @@ class SelectRandom implements IAnimationHandler {
   countDownToSelect: any
   selectedIndex: number
 
+  animationCache: HTMLImageElement[]
+
   constructor(mode = SelectionMode.FirstOnly, options?: iSelectRandomOptions) {
     this.lastFrame = 0
     this.touchStart = this.updateTouches
@@ -85,6 +87,8 @@ class SelectRandom implements IAnimationHandler {
     this.height = this.width = 0
     this.state = State.Empty
     this.enableResetFlag = false
+
+    this.animationCache = []
   }
 
   get state(): State { return this._state }
@@ -142,6 +146,12 @@ class SelectRandom implements IAnimationHandler {
     this.state = State.Selecting
   }
 
+  buildAnimationImages = () => {
+    this.animationCache = []
+
+    
+  }
+
   selectRandomPlayer = () => {
     const unpickedTouches = (this.activeTouches as (iCircle & withVanishingState)[]).filter(t => t.getState() === DrawState.Normal)
 
@@ -155,6 +165,8 @@ class SelectRandom implements IAnimationHandler {
       this.state = State.Finished
     }
   }
+
+
 
   copyTouch = (touch: Touch | iSimulatedTouch): iCircle => {
     const id = touch.identifier

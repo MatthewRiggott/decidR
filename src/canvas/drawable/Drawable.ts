@@ -79,7 +79,7 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
   let normalDraw = drawable.draw
   let animationDuration = 0
   let mode = DrawMode.Vanishing
-  let animationFrames: HTMLImageElement[] = []
+  let animationFrames: ImageBitmap[] = []
   let vanishable = {
     vanishOptions,
     getMode() { return mode },
@@ -89,7 +89,7 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
       this.setState(DrawState.Animating)
     },
     getState() { return state },
-    setState(value: DrawState) {
+    async setState(value: DrawState) {
       if(state == value) {
         return;
       }
@@ -100,7 +100,8 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
         animationDuration = 0
         if(animationFrames.length == 0) {
           const sx = drawable.imageData
-          animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color)
+          animationFrames = await Promise.all<ImageBitmap>(loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color))
+          debugger
         }
       } else if (state == DrawState.AnimationFinished) {
         if(vanishOptions.callback && mode == DrawMode.Vanishing) {
@@ -113,8 +114,9 @@ export function withVanishingState<T extends iDrawable>(drawable: T, ctx: Canvas
         }
       }
     },
-    reloadFrames: function() {
-      animationFrames = loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color)
+    reloadFrames: async function() {
+      animationFrames = await Promise.all<ImageBitmap>(loadVanishFrames(drawable.imageData!, vanishOptions.frames, drawable.color))
+      debugger
     },
     draw: function(ctx: CanvasRenderingContext2D, delta: number) {
       if(state == DrawState.Normal) {
@@ -159,13 +161,15 @@ const weightedRandomDistrib = (peak: number, count: number) => {
   return chance.weighted(seq, prob);
 }
 
-function loadVanishFrames (imageData: ImageData, count: number, colorFilter?: Color): HTMLImageElement[] {
+function loadVanishFrames (imageData: ImageData, count: number, colorFilter?: Color): Promise<ImageBitmap>[] {
   let imgs: HTMLImageElement[] = [];
+  let bitmap: ImageBitmap[] = []
   const pixelArr = imageData.data;
-  const data = imageData.data.slice(0).fill(0);
+  const sliced = imageData.data.slice(0)
+  const data = sliced.fill(0);
   const width = imageData.width
   const height = imageData.height
-  let imageDataArray = Array.from({length: count}, e => data.slice(0));
+  let imageDataArray = Array.from({length: count}, e => sliced);
   
   //put pixel info to imageDataArray (Weighted Distributed)
   for (let i = 0; i < pixelArr.length; i+=4) {
@@ -189,17 +193,21 @@ function loadVanishFrames (imageData: ImageData, count: number, colorFilter?: Co
       }
     }
   }
+  let promiseContainer = []
   for(let i = 0; i < imageDataArray.length; i++) {
     let img = new Image()
     let tmpCanvas = document.createElement("canvas")
     tmpCanvas.width = width
     tmpCanvas.height = height
     let tmpCtx = tmpCanvas.getContext("2d")!
-    tmpCtx.putImageData(new ImageData(imageDataArray[i], width, height), 0, 0)
-    img.src = tmpCanvas.toDataURL('image/png')	
-    imgs.push(img)
+    promiseContainer.push(createImageBitmap(tmpCanvas, 0, 0, width, height))
+    // tmpCtx.putImageData(new ImageData(imageDataArray[i], width, height), 0, 0)
+    // img.src = tmpCanvas.toDataURL('image/png')	
+    // imgs.push(img)
   }
-  return imgs
+
+  return promiseContainer;
+  //return imgs
 }
 
 function hexToRGB(hexString: string){
